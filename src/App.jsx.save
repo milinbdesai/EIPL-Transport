@@ -1,87 +1,156 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, BarChart3, LogOut, Plus, Truck, Users, MapPin, Clock, CheckCircle, AlertTriangle, Home, Settings } from 'lucide-react';
+import { AlertCircle, BarChart3, LogOut, Plus, Truck, Users, MapPin, Clock, CheckCircle, AlertTriangle, Home } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
+
+// Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyB3j3lOvWWSgV_9iA7sdCwZBjOQXzwdKcA",
+  authDomain: "eipl-transport.firebaseapp.com",
+  projectId: "eipl-transport",
+  storageBucket: "eipl-transport.firebasestorage.app",
+  messagingSenderId: "302202462194",
+  appId: "1:302202462194:web:f0ef458ed433f1908c156b"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 const ExcelsourceTransportApp = () => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [authState, setAuthState] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('employee');
   const [activePage, setActivePage] = useState('dashboard');
+  const [cars, setCars] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Mock data (replace with Firebase calls)
-  const [cars, setCars] = useState([
-    { id: 1, regNumber: 'GJ01AB1234', model: 'Fortuner', insurance: '2025-06-15', fastag: 'FT1234', status: 'available', location: 'Vadodara Office' },
-    { id: 2, regNumber: 'GJ01AB5678', model: 'Innova', insurance: '2025-08-20', fastag: 'FT5678', status: 'in_use', location: 'Ahmedabad' },
-    { id: 3, regNumber: 'GJ01AB9012', model: 'Ertiga', insurance: '2025-05-10', fastag: 'FT9012', status: 'breakdown', location: 'Service Center' },
-  ]);
+  // Fetch users from Firestore
+  const fetchUsers = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'users'));
+      const usersList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setUsers(usersList);
+      return usersList;
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
+  };
 
-  const [trips, setTrips] = useState([
-    { id: 101, carId: 1, driverId: 2, employeeId: 3, from: 'Vadodara Office', to: 'Ahmedabad', status: 'completed', startTime: '09:00', endTime: '11:30', date: '2024-01-15' },
-    { id: 102, carId: 2, driverId: 1, employeeId: 4, from: 'Vadodara Office', to: 'Surat', status: 'in_progress', startTime: '10:00', endTime: null, date: '2024-01-16' },
-  ]);
+  // Fetch cars from Firestore
+  const fetchCars = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'cars'));
+      const carsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setCars(carsList);
+    } catch (error) {
+      console.error('Error fetching cars:', error);
+    }
+  };
 
-  const [users, setUsers] = useState([
-    { id: 1, email: 'driver1@excelsource.com', name: 'Rajesh Kumar', role: 'driver', phone: '9876543210' },
-    { id: 2, email: 'driver2@excelsource.com', name: 'Suresh Patel', role: 'driver', phone: '9876543211' },
-    { id: 3, email: 'admin@excelsource.com', name: 'Priya Sharma', role: 'admin', phone: '9876543212' },
-    { id: 4, email: 'manager@excelsource.com', name: 'Vijay Singh', role: 'management', phone: '9876543213' },
-  ]);
+  // Fetch trips from Firestore
+  const fetchTrips = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'trips'));
+      const tripsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTrips(tripsList);
+    } catch (error) {
+      console.error('Error fetching trips:', error);
+    }
+  };
 
-  // Mock authentication
-  const handleLogin = () => {
-    if (email && password) {
-      const user = users.find(u => u.email === email);
+  // Load data when component mounts
+  useEffect(() => {
+    fetchUsers();
+    fetchCars();
+    fetchTrips();
+  }, []);
+
+  // Handle login
+  const handleLogin = async () => {
+    setLoading(true);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const usersList = await fetchUsers();
+      const user = usersList.find(u => u.email === email);
+      
       if (user) {
-        setCurrentUser({ ...user, email });
+        setCurrentUser({ uid: userCredential.user.uid, email, ...user });
+        setUserRole(user.role);
         setAuthState('app');
         setActivePage('dashboard');
       } else {
-        alert('Invalid credentials');
+        alert('User role not found in database');
       }
+    } catch (error) {
+      alert('Login failed: ' + error.message);
+    }
+    setLoading(false);
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+      setUserRole(null);
+      setAuthState('login');
+      setEmail('');
+      setPassword('');
+    } catch (error) {
+      alert('Logout failed: ' + error.message);
     }
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setAuthState('login');
-    setEmail('');
-    setPassword('');
-  };
-
-  const handleAddCar = (newCar) => {
-    setCars([...cars, { ...newCar, id: cars.length + 1 }]);
-  };
-
-  const handleCreateTrip = (tripRequest) => {
-    setTrips([...trips, { ...tripRequest, id: trips.length + 101 }]);
-  };
-
-  const handleUpdateTripStatus = (tripId, newStatus) => {
-    setTrips(trips.map(t => t.id === tripId ? { ...t, status: newStatus, endTime: newStatus === 'completed' ? new Date().toLocaleTimeString() : null } : t));
-  };
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'available': return '#22c55e';
-      case 'in_use': return '#f59e0b';
-      case 'breakdown': return '#ef4444';
-      case 'completed': return '#3b82f6';
-      case 'in_progress': return '#f59e0b';
-      default: return '#9ca3af';
+  // Add car
+  const handleAddCar = async (newCar) => {
+    try {
+      await addDoc(collection(db, 'cars'), newCar);
+      await fetchCars();
+      alert('Car added successfully!');
+    } catch (error) {
+      alert('Error adding car: ' + error.message);
     }
   };
 
-  const getStatusLabel = (status) => {
-    const labels = {
-      'available': 'Available',
-      'in_use': 'In Use',
-      'breakdown': 'Breakdown',
-      'completed': 'Completed',
-      'in_progress': 'In Progress',
-      'pending': 'Pending'
-    };
-    return labels[status] || status;
+  // Update car status
+  const handleUpdateCarStatus = async (carId, newStatus) => {
+    try {
+      await updateDoc(doc(db, 'cars', carId), { status: newStatus });
+      await fetchCars();
+    } catch (error) {
+      alert('Error updating car: ' + error.message);
+    }
+  };
+
+  // Create trip
+  const handleCreateTrip = async (tripData) => {
+    try {
+      await addDoc(collection(db, 'trips'), tripData);
+      await fetchTrips();
+      alert('Trip request created!');
+    } catch (error) {
+      alert('Error creating trip: ' + error.message);
+    }
+  };
+
+  // Update trip status
+  const handleUpdateTripStatus = async (tripId, newStatus) => {
+    try {
+      await updateDoc(doc(db, 'trips', tripId), { 
+        status: newStatus,
+        endTime: newStatus === 'completed' ? new Date().toLocaleTimeString() : null
+      });
+      await fetchTrips();
+    } catch (error) {
+      alert('Error updating trip: ' + error.message);
+    }
   };
 
   if (authState === 'login') {
@@ -160,28 +229,28 @@ const ExcelsourceTransportApp = () => {
 
           <button
             onClick={handleLogin}
+            disabled={loading}
             style={{
               width: '100%',
               padding: '12px',
-              background: '#E67E22',
+              background: loading ? '#ccc' : '#E67E22',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
               fontSize: '16px',
               fontWeight: '600',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
               marginTop: '20px'
             }}
           >
-            Sign In
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
 
           <div style={{ marginTop: '20px', padding: '15px', background: '#f3f4f6', borderRadius: '6px', fontSize: '13px', color: '#4b5563' }}>
-            <strong>Demo Accounts:</strong>
+            <strong>Demo Accounts (from Firebase):</strong>
             <p style={{ margin: '8px 0 0 0' }}>Admin: admin@excelsource.com / password</p>
             <p style={{ margin: '4px 0 0 0' }}>Manager: manager@excelsource.com / password</p>
             <p style={{ margin: '4px 0 0 0' }}>Driver: driver1@excelsource.com / password</p>
-            <p style={{ margin: '4px 0 0 0' }}>Employee: (register new)</p>
           </div>
         </div>
       </div>
@@ -204,7 +273,8 @@ const ExcelsourceTransportApp = () => {
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        overflowY: 'auto'
       }}>
         <div style={{ marginBottom: '30px' }}>
           <div style={{
@@ -220,11 +290,11 @@ const ExcelsourceTransportApp = () => {
             <Truck size={28} />
           </div>
           <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 4px 0' }}>Excelsource</h2>
-          <p style={{ fontSize: '12px', color: '#a0aec0', margin: '0' }}>{currentUser?.role.toUpperCase()}</p>
+          <p style={{ fontSize: '12px', color: '#a0aec0', margin: '0' }}>{userRole?.toUpperCase()}</p>
         </div>
 
         <nav style={{ flex: 1 }}>
-          {currentUser?.role === 'admin' && (
+          {userRole === 'admin' && (
             <>
               <NavItem icon={<Home size={20} />} label="Dashboard" page="dashboard" active={activePage === 'dashboard'} onClick={() => setActivePage('dashboard')} />
               <NavItem icon={<Truck size={20} />} label="Cars" page="cars" active={activePage === 'cars'} onClick={() => setActivePage('cars')} />
@@ -233,20 +303,20 @@ const ExcelsourceTransportApp = () => {
               <NavItem icon={<Users size={20} />} label="Users" page="users" active={activePage === 'users'} onClick={() => setActivePage('users')} />
             </>
           )}
-          {currentUser?.role === 'management' && (
+          {userRole === 'management' && (
             <>
               <NavItem icon={<Home size={20} />} label="Dashboard" page="dashboard" active={activePage === 'dashboard'} onClick={() => setActivePage('dashboard')} />
               <NavItem icon={<BarChart3 size={20} />} label="Reports" page="reports" active={activePage === 'reports'} onClick={() => setActivePage('reports')} />
               <NavItem icon={<Truck size={20} />} label="Trips" page="trips" active={activePage === 'trips'} onClick={() => setActivePage('trips')} />
             </>
           )}
-          {currentUser?.role === 'driver' && (
+          {userRole === 'driver' && (
             <>
               <NavItem icon={<Home size={20} />} label="My Assignments" page="assignments" active={activePage === 'assignments'} onClick={() => setActivePage('assignments')} />
               <NavItem icon={<MapPin size={20} />} label="Active Trip" page="active-trip" active={activePage === 'active-trip'} onClick={() => setActivePage('active-trip')} />
             </>
           )}
-          {currentUser?.role === 'employee' && (
+          {userRole === 'employee' && (
             <>
               <NavItem icon={<Home size={20} />} label="Request Car" page="request-car" active={activePage === 'request-car'} onClick={() => setActivePage('request-car')} />
               <NavItem icon={<Truck size={20} />} label="My Trips" page="my-trips" active={activePage === 'my-trips'} onClick={() => setActivePage('my-trips')} />
@@ -278,7 +348,7 @@ const ExcelsourceTransportApp = () => {
       {/* Main Content */}
       <div style={{ flex: 1, padding: '30px', overflowY: 'auto' }}>
         {activePage === 'dashboard' && <DashboardPage cars={cars} trips={trips} currentUser={currentUser} />}
-        {activePage === 'cars' && <CarsPage cars={cars} />}
+        {activePage === 'cars' && <CarsPage cars={cars} onUpdateStatus={handleUpdateCarStatus} />}
         {activePage === 'add-car' && <AddCarPage onAddCar={handleAddCar} />}
         {activePage === 'trips' && <TripsPage trips={trips} cars={cars} users={users} />}
         {activePage === 'users' && <UsersPage users={users} />}
@@ -338,9 +408,13 @@ function DashboardPage({ cars, trips, currentUser }) {
       <div style={{ background: 'white', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1F2937', marginBottom: '20px' }}>Car Availability Status</h3>
         <div style={{ display: 'grid', gap: '12px' }}>
-          {cars.map(car => (
-            <CarStatusRow key={car.id} car={car} />
-          ))}
+          {cars.length > 0 ? (
+            cars.map(car => (
+              <CarStatusRow key={car.id} car={car} />
+            ))
+          ) : (
+            <p style={{ color: '#6b7280' }}>No cars added yet</p>
+          )}
         </div>
       </div>
     </div>
@@ -419,7 +493,7 @@ function CarStatusRow({ car }) {
 }
 
 // Cars Page
-function CarsPage({ cars }) {
+function CarsPage({ cars, onUpdateStatus }) {
   return (
     <div>
       <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1F2937', marginBottom: '30px' }}>Fleet Inventory</h1>
@@ -440,16 +514,24 @@ function CarsPage({ cars }) {
                 <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1F2937', margin: '0' }}>{car.regNumber}</h3>
                 <p style={{ fontSize: '14px', color: '#6b7280', margin: '4px 0 0 0' }}>{car.model}</p>
               </div>
-              <span style={{
-                padding: '4px 8px',
-                background: car.status === 'available' ? '#dcfce7' : car.status === 'in_use' ? '#fef3c7' : '#fee2e2',
-                borderRadius: '4px',
-                fontSize: '11px',
-                fontWeight: '600',
-                color: car.status === 'available' ? '#166534' : car.status === 'in_use' ? '#b45309' : '#7f1d1d'
-              }}>
-                ● {car.status === 'available' ? 'Available' : car.status === 'in_use' ? 'In Use' : 'Breakdown'}
-              </span>
+              <select
+                value={car.status}
+                onChange={(e) => onUpdateStatus(car.id, e.target.value)}
+                style={{
+                  padding: '4px 8px',
+                  background: car.status === 'available' ? '#dcfce7' : car.status === 'in_use' ? '#fef3c7' : '#fee2e2',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  color: car.status === 'available' ? '#166534' : car.status === 'in_use' ? '#b45309' : '#7f1d1d',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="available">Available</option>
+                <option value="in_use">In Use</option>
+                <option value="breakdown">Breakdown</option>
+              </select>
             </div>
             <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
               <div style={{ marginBottom: '12px' }}>
@@ -474,15 +556,15 @@ function AddCarPage({ onAddCar }) {
     regNumber: '',
     model: '',
     insurance: '',
-    fastag: ''
+    fastag: '',
+    location: 'Vadodara Office'
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (formData.regNumber && formData.model && formData.insurance && formData.fastag) {
-      onAddCar({ ...formData, status: 'available', location: 'Vadodara Office' });
-      setFormData({ regNumber: '', model: '', insurance: '', fastag: '' });
-      alert('Car added successfully!');
+      onAddCar({ ...formData, status: 'available' });
+      setFormData({ regNumber: '', model: '', insurance: '', fastag: '', location: 'Vadodara Office' });
     }
   };
 
@@ -603,7 +685,6 @@ function TripsPage({ trips, cars, users }) {
           <thead>
             <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f9fafb' }}>
               <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280' }}>Car</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280' }}>Driver</th>
               <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280' }}>From</th>
               <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280' }}>To</th>
               <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280' }}>Date</th>
@@ -613,11 +694,9 @@ function TripsPage({ trips, cars, users }) {
           <tbody>
             {trips.map(trip => {
               const car = cars.find(c => c.id === trip.carId);
-              const driver = users.find(u => u.id === trip.driverId);
               return (
                 <tr key={trip.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '12px', fontSize: '13px', color: '#1F2937' }}>{car?.regNumber}</td>
-                  <td style={{ padding: '12px', fontSize: '13px', color: '#1F2937' }}>{driver?.name}</td>
+                  <td style={{ padding: '12px', fontSize: '13px', color: '#1F2937' }}>{car?.regNumber || 'N/A'}</td>
                   <td style={{ padding: '12px', fontSize: '13px', color: '#1F2937' }}>{trip.from}</td>
                   <td style={{ padding: '12px', fontSize: '13px', color: '#1F2937' }}>{trip.to}</td>
                   <td style={{ padding: '12px', fontSize: '13px', color: '#1F2937' }}>{trip.date}</td>
@@ -638,6 +717,11 @@ function TripsPage({ trips, cars, users }) {
             })}
           </tbody>
         </table>
+        {trips.length === 0 && (
+          <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280' }}>
+            No trips yet
+          </div>
+        )}
       </div>
     </div>
   );
@@ -691,8 +775,7 @@ function UsersPage({ users }) {
 // Reports Page
 function ReportsPage({ trips, cars }) {
   const completedTrips = trips.filter(t => t.status === 'completed').length;
-  const totalDistance = trips.length * 45; // mock calculation
-  const avgUsagePerCar = (trips.length / cars.length).toFixed(1);
+  const avgUsagePerCar = cars.length > 0 ? (trips.length / cars.length).toFixed(1) : 0;
 
   return (
     <div>
@@ -714,11 +797,10 @@ function ReportsPage({ trips, cars }) {
           color: '#1F2937',
           lineHeight: '1.8'
         }}>
-          <p><strong>Total Trips This Month:</strong> {trips.length}</p>
+          <p><strong>Total Trips:</strong> {trips.length}</p>
           <p><strong>Completed:</strong> {completedTrips}</p>
           <p><strong>In Progress:</strong> {trips.filter(t => t.status === 'in_progress').length}</p>
           <p><strong>Average Trips Per Car:</strong> {avgUsagePerCar}</p>
-          <p><strong>Most Used Car:</strong> GJ01AB1234 (4 trips)</p>
         </div>
       </div>
     </div>
@@ -743,7 +825,7 @@ function ReportCard({ label, value, unit, color }) {
 
 // Driver Assignments Page
 function DriverAssignmentsPage({ trips, currentUser, onUpdateTripStatus }) {
-  const driverTrips = trips.filter(t => t.driverId === currentUser.id);
+  const driverTrips = trips.filter(t => t.driverId === currentUser?.id);
 
   return (
     <div>
@@ -824,7 +906,7 @@ function DriverAssignmentsPage({ trips, currentUser, onUpdateTripStatus }) {
 
 // Active Trip Page
 function ActiveTripPage({ trips, currentUser, onUpdateTripStatus }) {
-  const activeTrip = trips.find(t => t.driverId === currentUser.id && t.status === 'in_progress');
+  const activeTrip = trips.find(t => t.driverId === currentUser?.id && t.status === 'in_progress');
 
   return (
     <div>
@@ -847,11 +929,7 @@ function ActiveTripPage({ trips, currentUser, onUpdateTripStatus }) {
 
           <div style={{ display: 'grid', gap: '10px' }}>
             <button
-              onClick={() => {
-                if (window.confirm('Mark this trip as completed?')) {
-                  onUpdateTripStatus(activeTrip.id, 'completed');
-                }
-              }}
+              onClick={() => onUpdateTripStatus(activeTrip.id, 'completed')}
               style={{
                 width: '100%',
                 padding: '14px',
@@ -865,21 +943,6 @@ function ActiveTripPage({ trips, currentUser, onUpdateTripStatus }) {
               }}
             >
               ✓ Trip Completed - Reached Destination
-            </button>
-            <button
-              style={{
-                width: '100%',
-                padding: '14px',
-                background: '#e5e7eb',
-                color: '#6b7280',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                fontWeight: '600'
-              }}
-            >
-              ⚠ Report Issue
             </button>
           </div>
         </div>
@@ -923,16 +986,15 @@ function RequestCarPage({ onCreateTrip, currentUser, cars }) {
       if (availableCar) {
         onCreateTrip({
           carId: availableCar.id,
-          driverId: 1, // mock driver assignment
-          employeeId: currentUser.id,
+          driverId: 'auto-assigned',
+          employeeId: currentUser?.id,
           from: formData.from,
           to: formData.to,
-          status: 'in_progress',
+          status: 'pending',
           startTime: formData.time,
           endTime: null,
           date: formData.date
         });
-        alert('Car request created! Admin will assign shortly.');
         setFormData({ from: '', to: '', date: '', time: '' });
       } else {
         alert('No cars available');
@@ -1043,7 +1105,7 @@ function RequestCarPage({ onCreateTrip, currentUser, cars }) {
 
 // My Trips Page
 function MyTripsPage({ trips, currentUser }) {
-  const employeeTrips = trips.filter(t => t.employeeId === currentUser.id);
+  const employeeTrips = trips.filter(t => t.employeeId === currentUser?.id);
 
   return (
     <div>
@@ -1099,3 +1161,7 @@ function MyTripsPage({ trips, currentUser }) {
 }
 
 export default ExcelsourceTransportApp;
+git add .
+git commit -m "Firebase integration"
+git push origin main
+
